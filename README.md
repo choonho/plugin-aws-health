@@ -1,2 +1,2 @@
-# plugin-monitoring-aws-health
+# plugin-aws-health
 Plugin for AWS Personal Health
