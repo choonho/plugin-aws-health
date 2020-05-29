@@ -21,7 +21,7 @@ with open('VERSION', 'r') as f:
     f.close()
 
 setup(
-    name='plugin-monitoring-aws-health',
+    name='plugin-aws-health',
     version=VERSION,
     description='AWS health collector',
     long_description='',
