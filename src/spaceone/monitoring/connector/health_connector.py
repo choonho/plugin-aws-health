@@ -1,20 +1,17 @@
 # -*- coding: utf-8 -*-
 
-import os
-import os.path
 # AWS SDK for Python
 import boto3
-import json
 import re
 import logging
-import pprint
-import time
+import sys
 
 from botocore.exceptions import ClientError
 
 from multiprocessing import Pool
-
 from datetime import datetime
+
+from spaceone.core import utils
 from spaceone.core.transaction import Transaction
 from spaceone.core.error import *
 from spaceone.core.connector import BaseConnector
@@ -25,8 +22,6 @@ __all__ = ["HealthConnector"]
 
 
 _LOGGER = logging.getLogger(__name__)
-
-RESOURCES = ['cloudformation', 'cloudwatch', 'dynamodb', 'ec2', 'glacier', 'iam', 'opsworks', 's3', 'sns', 'sqs']
 DEFAULT_REGION = 'us-east-1'
 NUMBER_OF_CONCURRENT = 1
 
@@ -36,12 +31,12 @@ class HealthConnector(BaseConnector):
     def __init__(self, transaction, config):
         super().__init__(transaction, config)
 
-    def create_session(self, options, secret_data):
+    def create_session(self, schema, options, secret_data):
         """ Verify health Session
         """
-        create_session(secret_data, options)
+        create_session(schema, secret_data, options)
 
-    def collect_info(self, query, options, secret_data, start, end, resource, sort, limit=200):
+    def collect_info(self, schema, query, options, secret_data, start, end, resource, sort, limit=200):
         """
         Args:
             query (dict): example
@@ -51,7 +46,7 @@ class HealthConnector(BaseConnector):
                       'region_name': ['aaaa']
                   }
             resource: arn:aws:ec2:<REGION>:<ACCOUNT_ID>:instance/<instance-id>
-        If there is regiona_name in query, this indicates searching only these regions
+        If there is region_name in query, this indicates searching only these regions
         """
         (query, resource_ids, region_name) = self._check_query(query)
         post_filter_cache = False if len(region_name) > 0 else True
@@ -69,6 +64,7 @@ class HealthConnector(BaseConnector):
         regions = [DEFAULT_REGION]
         for region in regions:
             params.append({
+                'schema': schema,
                 'region_name': region,
                 'query': query,
                 'options': options,
@@ -123,20 +119,28 @@ class HealthConnector(BaseConnector):
 #######################
 # AWS Boto3 session
 #######################
-def create_session(secret_data: dict, options={}):
+def create_session(schema, secret_data: dict, options={}):
     _check_secret_data(secret_data)
 
     aws_access_key_id = secret_data['aws_access_key_id']
     aws_secret_access_key = secret_data['aws_secret_access_key']
     role_arn = secret_data.get('role_arn')
 
-    try:
-        if role_arn:
-            return _create_session_with_assume_role(aws_access_key_id, aws_secret_access_key, role_arn)
-        else:
-            return _create_session_with_access_key(aws_access_key_id, aws_secret_access_key)
-    except Exception as e:
-        raise ERROR_INVALID_CREDENTIALS()
+    if schema:
+        return getattr(sys.modules[__name__], f'_create_session_{schema}')(aws_access_key_id,
+                                                                           aws_secret_access_key,
+                                                                           role_arn)
+    else:
+        raise ERROR_REQUIRED_CREDENTIAL_SCHEMA()
+
+    # try:
+    #     if role_arn:
+    #         return _create_session_with_assume_role(aws_access_key_id, aws_secret_access_key, role_arn)
+    #     else:
+    #         return _create_session_with_access_key(aws_access_key_id, aws_secret_access_key)
+    # except Exception as e:
+    #     raise ERROR_INVALID_CREDENTIALS()
+
 
 def _check_secret_data(secret_data):
     if 'aws_access_key_id' not in secret_data:
@@ -145,46 +149,45 @@ def _check_secret_data(secret_data):
     if 'aws_secret_access_key' not in secret_data:
         raise ERROR_REQUIRED_PARAMETER(key='secret.aws_secret_access_key')
 
-def _create_session_with_access_key(aws_access_key_id, aws_secret_access_key):
-    session = boto3.Session(aws_access_key_id=aws_access_key_id,
-                                 aws_secret_access_key=aws_secret_access_key)
 
-    sts = session.client('sts')
-    sts.get_caller_identity()
-    return session
+def _create_session_aws_access_key(aws_access_key_id, aws_secret_access_key, role_arn):
+    return boto3.Session(aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
 
-def _create_session_with_assume_role(aws_access_key_id, aws_secret_access_key, role_arn):
-    _create_session_with_access_key(aws_access_key_id, aws_secret_access_key)
+
+def _create_session_aws_assume_role(aws_access_key_id, aws_secret_access_key, role_arn):
+    session = _create_session_aws_access_key(aws_access_key_id, aws_secret_access_key)
 
     sts = session.client('sts')
     assume_role_object = sts.assume_role(RoleArn=role_arn, RoleSessionName=utils.generate_id('AssumeRoleSession'))
     credentials = assume_role_object['Credentials']
 
-    session = boto3.Session(aws_access_key_id=credentials['AccessKeyId'],
-                            aws_secret_access_key=credentials['SecretAccessKey'],
-                            aws_session_toke=credentials['SessionToken'])
-    return session
+    return boto3.Session(aws_access_key_id=credentials['AccessKeyId'],
+                         aws_secret_access_key=credentials['SecretAccessKey'],
+                         aws_session_token=credentials['SessionToken'])
 
 
-def _set_connect(secret_data, region_name, service="health"):
+def _set_connect(schema, secret_data, region_name, service="health"):
     """
     """
-    session = create_session(secret_data)
-    aws_conf = {}
-    #aws_conf['region_name'] = region_name
+    # aws_conf = {}
+    # aws_conf['region_name'] = region_name
 
-    if service in RESOURCES:
-        resource = session.resource(service, **aws_conf)
-        client = resource.meta.client
-    else:
-        resource = None
-        client = session.client(service, region_name=region_name)
-    return client, resource
+    # if service in RESOURCES:
+    #     resource = session.resource(service, **aws_conf)
+    #     client = resource.meta.client
+    # else:
+    #     resource = None
+    #     client = session.client(service, region_name=region_name)
+    # return client, resource
+
+    session = create_session(schema, secret_data)
+    return session.client(service, region_name=region_name)
 
 
 def discover_health(params):
     """
     Args: params (dict): {
+                'schema': 'str,
                 'region_name': 'str',
                 'query': 'dict',
                 'options': 'dict',
@@ -200,7 +203,7 @@ def discover_health(params):
     """
     print(f'[discover_health] {params["region_name"]}')
 
-    client, resource = _set_connect(params['secret_data'], params['region_name'])
+    client = _set_connect(params['schema'], params['secret_data'], params['region_name'])
     try:
         resources = _lookup_events(client, params)
         return resources
@@ -242,7 +245,7 @@ def _lookup_events(client, params):
         if len(events) == 0:
             # Fast return if No resources
             print("No events")
-            return (events, region_name)
+            return events, region_name
 
     except ClientError as e:
         print('=' * 30)
@@ -255,7 +258,7 @@ def _lookup_events(client, params):
 
     except Exception as e:
         print(f'[_lookup_events] Fail to lookup health events: {e}')
-        return (resource_list, region_name)
+        return resource_list, region_name
 
     # Find Events
     for event in events:
@@ -273,7 +276,8 @@ def _lookup_events(client, params):
 
         except Exception as e:
             print(f'[_lookup_events] error {e}')
-    return (resource_list, region_name)
+
+    return resource_list, region_name
 
 
 def _add_reference(eventArn):
@@ -282,6 +286,7 @@ def _add_reference(eventArn):
         'external_link': f'https://phd.aws.amazon.com/phd/home#/event-log?eventID={eventArn}&eventTab=details&layout=vertical'
     }
     return reference
+
 
 def _find_affected_entities(client, eventArn):
     filter_query = {
@@ -295,6 +300,7 @@ def _find_affected_entities(client, eventArn):
     except Exception as e:
         _LOGGER.debug(f'[_find_affected_entities] failed {e}')
         return 0
+
 
 def _parse_health_event(health_event):
     """ Parse health Event
@@ -369,6 +375,7 @@ if __name__ == "__main__":
 
     aki = os.environ.get('AWS_ACCESS_KEY_ID', "<YOUR_AWS_ACCESS_KEY_ID>")
     sak = os.environ.get('AWS_SECRET_ACCESS_KEY', "<YOUR_AWS_SECRET_ACCESS_KEY>")
+
     secret_data = {
         #        'region_name': 'ap-northeast-2',
         'aws_access_key_id': aki,
@@ -377,8 +384,8 @@ if __name__ == "__main__":
     conn = HealthConnector(Transaction(), secret_data)
     #opts = conn.verify({}, secret_data)
     #print(opts)
-    options = {'eventStatusCodes':['open','upcoming','closed'],
-               'all_events':True}
+    options = {'eventStatusCodes': ['open', 'upcoming', 'closed'],
+               'all_events': True}
     query = {}
     #query = {'region_name': ['ap-northeast-2', 'us-east-1']}
     #query = {}
@@ -388,7 +395,7 @@ if __name__ == "__main__":
     ec2_arn = 'arn:aws:ec2:ap-northeast-2:072548720675:instance/i-08c5592e084b24e20'
     sort = ""
     limit = 50
-    resource_stream = conn.collect_info(query=query, options=options, secret_data=secret_data,
+    resource_stream = conn.collect_info(schema='aws_access_key', query=query, options=options, secret_data=secret_data,
                                         start=start, end=end, resource=ec2_arn, sort=sort, limit=limit)
     import pprint
     for resource in resource_stream:
