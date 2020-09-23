@@ -7,6 +7,7 @@ from spaceone.core.pygrpc.message_type import *
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class Log(BaseAPI, log_pb2_grpc.LogServicer):
 
     pb2 = log_pb2

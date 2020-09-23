@@ -32,10 +32,8 @@ class TestLog(TestCase):
             'aws_access_key_id': AKI,
             'aws_secret_access_key': SAK
         }
-        resource_stream = self.monitoring.DataSource.verify({'options':options,
-                                                             'secret_data':secret_data})
-        for res in resource_stream:
-            print_json(res)
+        self.monitoring.DataSource.verify({'options': options, 'secret_data': secret_data})
+
  
     def test_list(self):
         options = {}
@@ -47,9 +45,9 @@ class TestLog(TestCase):
         end = datetime.utcnow()
         start = end - timedelta(days=3)
         resource = 'arn:aws:ec2:ap-northeast-2:072548720675:instance/i-08c5592e084b24e20'
-        resource_stream = self.monitoring.Log.list({'options':options,
-                                                    'secret_data':secret_data,
-                                                    'filter':filter,
+        resource_stream = self.monitoring.Log.list({'options': options,
+                                                    'secret_data': secret_data,
+                                                    'filter': filter,
                                                     'start': start,
                                                     'end': end,
                                                     'resource': resource})

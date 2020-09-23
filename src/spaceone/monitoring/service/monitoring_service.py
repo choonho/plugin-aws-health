@@ -7,17 +7,17 @@ from datetime import timedelta
 
 from spaceone.core.error import *
 from spaceone.core.service import *
-from spaceone.core.pygrpc.message_type import *
-
 from spaceone.monitoring.error import *
-from spaceone.monitoring.manager.monitoring_manager import MonitoringManager
+
 
 _LOGGER = logging.getLogger(__name__)
+DEFAULT_SCHEMA = 'aws_access_key'
 
 FILTER_FORMAT = [
 ]
 
 NUM_OF_LIMIT = 30
+
 
 @authentication_handler
 class MonitoringService(BaseService):
@@ -25,13 +25,14 @@ class MonitoringService(BaseService):
         super().__init__(metadata)
 
     @transaction
-    @check_required(['options','secret_data', 'filter', 'start', 'end'])
+    @check_required(['options', 'secret_data', 'filter', 'start', 'end'])
     @change_timestamp_value(['start', 'end'], timestamp_format='iso8601')
     def list_resources(self, params):
         """ Get quick list of resources
 
         Args:
             params (dict) {
+                'schema': 'str',
                 'options': 'dict',
                 'secret_data': 'dict',
                 'filter': 'dict',
@@ -45,6 +46,7 @@ class MonitoringService(BaseService):
         Returns: list of resources
         """
         manager = self.locator.get_manager('MonitoringManager')
+        schema = params.get('schema', DEFAULT_SCHEMA)
         options = params['options']
         secret_data = params['secret_data']
         filters = params['filter']
@@ -55,8 +57,11 @@ class MonitoringService(BaseService):
         limit = params.get('limit', NUM_OF_LIMIT)
 
         if options == {}:
-            options={'eventStatusCodes':['open','upcoming','closed'], 'all_events': True}
+            options = {'eventStatusCodes':['open', 'upcoming', 'closed'],
+                       'all_events': True}
 
         if start > end:
             start = end
-        return manager.list_resources(options, secret_data, filters, resource, start, end, sort, limit)
+
+        return manager.list_resources(schema, options, secret_data, filters, resource, start, end, sort, limit)
+

@@ -1,8 +1,5 @@
-# -*- coding: utf-8 -*-
 
 __all__ = ['PluginLogsResponse']
-
-import functools
 
 from spaceone.api.core.v1 import plugin_pb2
 from spaceone.api.monitoring.plugin import log_pb2
