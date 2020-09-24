@@ -41,9 +41,9 @@ class TestLog(TestCase):
             'aws_access_key_id': AKI,
             'aws_secret_access_key': SAK
         }
-        filter = {}
+        filter = {'eventStatusCodes': ['open', 'upcoming']}
         end = datetime.utcnow()
-        start = end - timedelta(days=3)
+        start = end - timedelta(days=10)
         resource = 'arn:aws:ec2:ap-northeast-2:072548720675:instance/i-08c5592e084b24e20'
         resource_stream = self.monitoring.Log.list({'options': options,
                                                     'secret_data': secret_data,
