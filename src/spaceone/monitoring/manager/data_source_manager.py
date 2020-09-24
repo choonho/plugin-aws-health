@@ -17,10 +17,3 @@ class DataSourceManager(BaseManager):
         response_model.validate()
         return response_model.to_primitive()
 
-    # @staticmethod
-    # def make_response():
-    #     response_model = PluginVerifyResponseModel()
-    #     response_model.validate()
-    #     return response_model.to_primitive()
-
-

@@ -43,5 +43,3 @@ class DataSourceService(BaseService):
         """
 
         self.aws_mgr.verify(params.get('schema', DEFAULT_SCHEMA), params['options'], params['secret_data'])
-        # self.aws_mgr.verify(params['options'], params['secret_data'])
-        # return self.data_source_mgr.make_response()
