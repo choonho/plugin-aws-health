@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-
-# AWS SDK for Python
 import boto3
 import re
 import logging
@@ -96,7 +93,8 @@ class HealthConnector(BaseConnector):
                 response['result'] = {'logs': []}
                 yield response
 
-    def _check_query(self, query):
+    @staticmethod
+    def _check_query(query):
         resource_ids = []
         filters = []
         region_name = []
@@ -108,7 +106,7 @@ class HealthConnector(BaseConnector):
                 region_name.extend(value)
 
             else:
-                if isinstance(value, list) == False:
+                if not isinstance(value, list):
                     value = [value]
 
                 if len(value) > 0:
@@ -133,14 +131,6 @@ def create_session(schema, secret_data: dict, options={}):
     else:
         raise ERROR_REQUIRED_CREDENTIAL_SCHEMA()
 
-    # try:
-    #     if role_arn:
-    #         return _create_session_with_assume_role(aws_access_key_id, aws_secret_access_key, role_arn)
-    #     else:
-    #         return _create_session_with_access_key(aws_access_key_id, aws_secret_access_key)
-    # except Exception as e:
-    #     raise ERROR_INVALID_CREDENTIALS()
-
 
 def _check_secret_data(secret_data):
     if 'aws_access_key_id' not in secret_data:
@@ -150,7 +140,7 @@ def _check_secret_data(secret_data):
         raise ERROR_REQUIRED_PARAMETER(key='secret.aws_secret_access_key')
 
 
-def _create_session_aws_access_key(aws_access_key_id, aws_secret_access_key, role_arn):
+def _create_session_aws_access_key(aws_access_key_id, aws_secret_access_key, role_arn=None):
     return boto3.Session(aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
 
 
@@ -169,17 +159,6 @@ def _create_session_aws_assume_role(aws_access_key_id, aws_secret_access_key, ro
 def _set_connect(schema, secret_data, region_name, service="health"):
     """
     """
-    # aws_conf = {}
-    # aws_conf['region_name'] = region_name
-
-    # if service in RESOURCES:
-    #     resource = session.resource(service, **aws_conf)
-    #     client = resource.meta.client
-    # else:
-    #     resource = None
-    #     client = session.client(service, region_name=region_name)
-    # return client, resource
-
     session = create_session(schema, secret_data)
     return session.client(service, region_name=region_name)
 
@@ -202,7 +181,6 @@ def discover_health(params):
     Returns: Resources, region_name
     """
     print(f'[discover_health] {params["region_name"]}')
-
     client = _set_connect(params['schema'], params['secret_data'], params['region_name'])
     try:
         resources = _lookup_events(client, params)
@@ -228,9 +206,8 @@ def _lookup_events(client, params):
     else:
         filter_query.update({'eventStatusCodes': ['open', 'upcoming']})
 
-    filter_query.update({'startTimes': [{'from': params['start']}],
-                        'endTimes': [{'to': params['end']}]
-                         })
+    filter_query.update({'startTimes': [{'from': params['start'], 'to': params['end']}]})
+
     # Paginator config
     limit = params.get('limit')
     print(f'limit: {limit}')
